@@ -8,21 +8,42 @@ import (
 )
 
 func Diff(lhs, rhs string) {
-	lhs = concatPrefix(lhs)
-	rhs = concatPrefix(rhs)
+	var err error
+	lhs, rhs, err = concat(lhs, rhs)
+	if err != nil {
+		return
+	}
 
 	fmt.Println(lhs)
 	fmt.Println(rhs)
 }
 
-func concatPrefix(s string) string {
+func concat(lhs, rhs string) (string, string, error) {
+	var err error
+	lhs, err = concatPrefix(lhs)
+	if err != nil {
+		fmt.Println(err)
+		return lhs, rhs, err
+	}
+	rhs, err = concatPrefix(rhs)
+	if err != nil {
+		fmt.Println(err)
+		return lhs, rhs, err
+	}
+	return lhs, rhs, nil
+}
+
+func concatPrefix(s string) (string, error) {
 	if !strings.HasPrefix(s, "/") {
 		wd, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return s
+			return s, err
 		}
 		s = path.Join(wd, s)
+
+		if _, err := os.Stat(s); os.IsNotExist(err) {
+			return s, err
+		}
 	}
-	return s
+	return s, nil
 }
