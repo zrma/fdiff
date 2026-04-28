@@ -1,5 +1,9 @@
 module fdiff
 
-go 1.14
+go 1.26
 
-require github.com/alexflint/go-arg v1.3.0
+toolchain go1.26.2
+
+require github.com/alexflint/go-arg v1.6.1
+
+require github.com/alexflint/go-scalar v1.2.0 // indirect
