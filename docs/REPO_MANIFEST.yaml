@@ -1,0 +1,20 @@
+schema_version: 1
+entrypoint: docs/HANDOFF.md
+agent_harness: docs/agent-harness.md
+status: docs/status.md
+roadmap: docs/roadmap.md
+active_work_glob: docs/todo-*.md
+
+checks:
+  full: scripts/check.sh
+  harness: scripts/check-agent-harness-interface.sh
+  publication: scripts/check-publication-boundary.py
+  rust:
+    - cargo fmt --all --check
+    - cargo test --all-targets --locked
+    - cargo clippy --all-targets --locked -- -D warnings
+
+vcs:
+  local: jj
+  change_message: "<type>: <summary>"
+  push_requires_explicit_permission: true
