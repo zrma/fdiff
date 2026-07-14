@@ -1,0 +1,1 @@
+endpoint = "https://example.invalid/api/v1/resources?include=metadata,history,permissions,relationships&format=terminal"

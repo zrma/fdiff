@@ -1,0 +1,5 @@
+# Deployment plan
+region = "south"
+replicas = 3
+autoscale = true
+logging = "info"

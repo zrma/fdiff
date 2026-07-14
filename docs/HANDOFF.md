@@ -16,12 +16,15 @@
 - diff core는 left-only, right-only, content change, type change, identical을 구분한다.
 - folder hierarchy, expand/collapse, stable rescan selection, narrow stacked layout이
   구현되어 있다.
+- 양쪽 regular file은 `Enter`로 bounded side-by-side line diff를 열 수 있고,
+  binary/non-UTF-8 input은 byte summary로 fallback한다.
 - 현재 다음 제품 slice는 status/path search와 status filter다.
 
 ## Architecture Map
 
 - `src/main.rs`: CLI parsing, interactive/plain mode 선택, exit status.
 - `src/diff.rs`: tree scan, semantic comparison, digest cache.
+- `src/content.rs`: bounded file loading, text line alignment, binary summary.
 - `src/tui.rs`: live loop, input, terminal lifecycle, dashboard rendering.
 - `src/output.rs`: automation-friendly plain text rendering.
 - `scripts/check.sh`: repository 전체 local gate.

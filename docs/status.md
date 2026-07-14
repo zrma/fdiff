@@ -2,12 +2,15 @@
 
 ## Current Milestone
 
-`v0.1.0` Rust/TUI foundation과 Commander-style tree navigation이 구현되어 있다.
+`v0.1.0` Rust/TUI foundation, Commander-style tree navigation, bounded content
+inspection이 구현되어 있다.
 
 - synchronized left/right pane과 주기적 rescan
-- 계층형 folder row, expand/collapse, active pane focus
+- 계층형 folder row와 expand/collapse
 - stable path selection과 collapse state, narrow terminal stacked layout
 - path navigation, pause/resume, manual refresh, identical toggle
+- side-by-side text line diff와 changed-row/horizontal navigation
+- binary first-difference/hex summary와 4 MiB inline preview limit
 - content-aware file comparison과 digest cache
 - symlink target/type-aware folder comparison
 - plain output과 automation용 `--check` exit status
@@ -17,11 +20,11 @@
 
 ## Known Limits
 
-- active pane은 현재 탐색 focus만 나타내며 pane별 file operation은 제공하지 않는다.
 - ignore/exclude rule과 `.gitignore` integration이 없다.
 - polling 기반이며 filesystem event notification을 사용하지 않는다.
 - scan 중 하나의 unreadable path가 있으면 해당 scan 전체가 실패한다.
-- content preview, line diff, rename detection, snapshot export가 없다.
+- inline content diff는 UTF-8 text line과 bounded binary summary만 제공하며 word-level
+  highlight, syntax highlight, rename detection, snapshot export는 없다.
 
 ## Publication Boundary
 

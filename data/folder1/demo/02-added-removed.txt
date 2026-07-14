@@ -1,0 +1,4 @@
+alpha
+beta
+left-only detail
+tail

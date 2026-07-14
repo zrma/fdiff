@@ -439,4 +439,27 @@ mod tests {
         assert_eq!(human_bytes(1024), "1.0 KiB");
         assert_eq!(human_bytes(1_572_864), "1.5 MiB");
     }
+
+    #[test]
+    fn bundled_demo_corpus_keeps_its_documented_classifications() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let report = DiffEngine::new(
+            root.join("data/folder1/demo"),
+            root.join("data/folder2/demo"),
+        )
+        .unwrap()
+        .scan()
+        .unwrap();
+
+        assert_eq!(
+            report.summary,
+            DiffSummary {
+                left_only: 3,
+                right_only: 2,
+                modified: 8,
+                type_changed: 1,
+                identical: 5,
+            }
+        );
+    }
 }

@@ -25,8 +25,8 @@
 
 ## P3: Content Inspection
 
-- [ ] 선택 파일의 metadata/content preview
-- [ ] text line diff와 binary summary
+- [x] 선택 파일의 metadata/content preview
+- [x] text line diff와 binary summary
 - [ ] rename/move 후보 탐지
 - [ ] machine-readable snapshot export
 

@@ -1,0 +1,5 @@
+alpha
+beta
+right detail one
+right detail two
+tail

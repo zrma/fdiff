@@ -12,6 +12,7 @@ blake3 = "1.8"
 clap = { version = "4.6", features = ["derive"] }
 crossterm = "0.29"
 ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29"] }
+similar = "3.1"
 walkdir = "2.5"
 
 [dev-dependencies]

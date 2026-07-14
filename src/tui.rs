@@ -16,6 +16,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
 
+use crate::content::{
+    ContentDiffKind, ContentRow, ContentRowKind, FileContentDiff, TextContentDiff,
+    load_content_diff,
+};
 use crate::diff::{DiffEngine, DiffEntry, DiffKind, DiffReport, EntryInfo, EntryKind, human_bytes};
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -33,11 +37,101 @@ struct VisibleRow<'a> {
     collapsed_children: usize,
 }
 
+struct ContentView {
+    diff: FileContentDiff,
+    selected: usize,
+    horizontal_offset: usize,
+}
+
+impl ContentView {
+    fn new(diff: FileContentDiff) -> Self {
+        let selected = match &diff.kind {
+            ContentDiffKind::Text(text) => text
+                .rows
+                .iter()
+                .position(ContentRow::is_difference)
+                .unwrap_or(0),
+            _ => 0,
+        };
+        Self {
+            diff,
+            selected,
+            horizontal_offset: 0,
+        }
+    }
+
+    fn text(&self) -> Option<&TextContentDiff> {
+        match &self.diff.kind {
+            ContentDiffKind::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.text().map(|text| text.rows.len()).unwrap_or(0)
+    }
+
+    fn select_next(&mut self) {
+        self.selected = (self.selected + 1).min(self.len().saturating_sub(1));
+    }
+
+    fn select_previous(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn select_last(&mut self) {
+        self.selected = self.len().saturating_sub(1);
+    }
+
+    fn page_down(&mut self) {
+        self.selected = (self.selected + 10).min(self.len().saturating_sub(1));
+    }
+
+    fn page_up(&mut self) {
+        self.selected = self.selected.saturating_sub(10);
+    }
+
+    fn select_next_difference(&mut self) {
+        let Some(text) = self.text() else {
+            return;
+        };
+        let next = text
+            .rows
+            .iter()
+            .enumerate()
+            .skip(self.selected.saturating_add(1))
+            .find(|(_, row)| row.is_difference())
+            .map(|(index, _)| index)
+            .or_else(|| text.rows.iter().position(ContentRow::is_difference));
+        if let Some(index) = next {
+            self.selected = index;
+        }
+    }
+
+    fn select_previous_difference(&mut self) {
+        let Some(text) = self.text() else {
+            return;
+        };
+        let previous = text
+            .rows
+            .iter()
+            .enumerate()
+            .take(self.selected)
+            .rev()
+            .find(|(_, row)| row.is_difference())
+            .map(|(index, _)| index)
+            .or_else(|| text.rows.iter().rposition(ContentRow::is_difference));
+        if let Some(index) = previous {
+            self.selected = index;
+        }
+    }
+}
+
 struct App {
     report: DiffReport,
     selected: usize,
-    active_pane: Pane,
     collapsed: BTreeSet<PathBuf>,
+    content: Option<ContentView>,
     show_identical: bool,
     paused: bool,
     spinner: usize,
@@ -186,11 +280,50 @@ impl App {
         }
     }
 
-    fn switch_pane(&mut self) {
-        self.active_pane = match self.active_pane {
-            Pane::Left => Pane::Right,
-            Pane::Right => Pane::Left,
+    fn open_selected_content(&mut self) {
+        let Some(path) = self.selected_path() else {
+            return;
         };
+        let comparable = self
+            .report
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .is_some_and(has_comparable_content);
+        if !comparable {
+            return;
+        }
+        match load_content_diff(&self.report.left_root, &self.report.right_root, &path) {
+            Ok(diff) => {
+                self.content = Some(ContentView::new(diff));
+                self.last_error = None;
+            }
+            Err(error) => self.last_error = Some(format!("{error:#}")),
+        }
+    }
+
+    fn reload_content(&mut self) {
+        let Some(path) = self
+            .content
+            .as_ref()
+            .map(|content| content.diff.relative_path.clone())
+        else {
+            return;
+        };
+        let horizontal_offset = self
+            .content
+            .as_ref()
+            .map(|content| content.horizontal_offset)
+            .unwrap_or(0);
+        match load_content_diff(&self.report.left_root, &self.report.right_root, &path) {
+            Ok(diff) => {
+                let mut content = ContentView::new(diff);
+                content.horizontal_offset = horizontal_offset;
+                self.content = Some(content);
+                self.last_error = None;
+            }
+            Err(error) => self.last_error = Some(format!("{error:#}")),
+        }
     }
 }
 
@@ -207,8 +340,8 @@ pub fn run(
     let mut app = App {
         report,
         selected: 0,
-        active_pane: Pane::Left,
         collapsed: BTreeSet::new(),
+        content: None,
         show_identical,
         paused: false,
         spinner: 0,
@@ -237,28 +370,81 @@ fn run_loop(
             && let Event::Key(key) = event::read()?
             && key.kind == KeyEventKind::Press
         {
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                KeyCode::Char('j') | KeyCode::Down => app.select_next(),
-                KeyCode::Char('k') | KeyCode::Up => app.select_previous(),
-                KeyCode::Char('g') | KeyCode::Home => app.selected = 0,
-                KeyCode::Char('G') | KeyCode::End => app.select_last(),
-                KeyCode::Tab => app.switch_pane(),
-                KeyCode::Char('h') | KeyCode::Left => app.collapse_or_select_parent(),
-                KeyCode::Char('l') | KeyCode::Right => app.expand_selected_directory(),
-                KeyCode::Enter => app.toggle_selected_directory(),
-                KeyCode::Char(' ') => app.paused = !app.paused,
-                KeyCode::Char('a') => {
-                    let selected_path = app.selected_path();
-                    app.show_identical = !app.show_identical;
-                    if let Some(path) = selected_path {
-                        app.select_path(&path);
-                    } else {
-                        app.clamp_selection();
+            if app.content.is_some() {
+                match key.code {
+                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Esc | KeyCode::Backspace => {
+                        app.content = None;
+                        app.last_error = None;
                     }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        app.content.as_mut().expect("content is open").select_next();
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        app.content
+                            .as_mut()
+                            .expect("content is open")
+                            .select_previous();
+                    }
+                    KeyCode::Char('g') | KeyCode::Home => {
+                        app.content.as_mut().expect("content is open").selected = 0;
+                    }
+                    KeyCode::Char('G') | KeyCode::End => {
+                        app.content.as_mut().expect("content is open").select_last();
+                    }
+                    KeyCode::PageDown => {
+                        app.content.as_mut().expect("content is open").page_down();
+                    }
+                    KeyCode::PageUp => {
+                        app.content.as_mut().expect("content is open").page_up();
+                    }
+                    KeyCode::Char('n') => app
+                        .content
+                        .as_mut()
+                        .expect("content is open")
+                        .select_next_difference(),
+                    KeyCode::Char('p') => app
+                        .content
+                        .as_mut()
+                        .expect("content is open")
+                        .select_previous_difference(),
+                    KeyCode::Char('h') | KeyCode::Left => {
+                        let content = app.content.as_mut().expect("content is open");
+                        content.horizontal_offset = content.horizontal_offset.saturating_sub(4);
+                    }
+                    KeyCode::Char('l') | KeyCode::Right => {
+                        let content = app.content.as_mut().expect("content is open");
+                        content.horizontal_offset = content.horizontal_offset.saturating_add(4);
+                    }
+                    KeyCode::Char('r') => app.reload_content(),
+                    _ => {}
                 }
-                KeyCode::Char('r') => refresh(engine, app),
-                _ => {}
+            } else {
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                    KeyCode::Char('j') | KeyCode::Down => app.select_next(),
+                    KeyCode::Char('k') | KeyCode::Up => app.select_previous(),
+                    KeyCode::Char('g') | KeyCode::Home => app.selected = 0,
+                    KeyCode::Char('G') | KeyCode::End => app.select_last(),
+                    KeyCode::Char('h') | KeyCode::Left => app.collapse_or_select_parent(),
+                    KeyCode::Char('l') | KeyCode::Right => app.expand_selected_directory(),
+                    KeyCode::Enter => {
+                        app.toggle_selected_directory();
+                        app.open_selected_content();
+                    }
+                    KeyCode::Char(' ') => app.paused = !app.paused,
+                    KeyCode::Char('a') => {
+                        let selected_path = app.selected_path();
+                        app.show_identical = !app.show_identical;
+                        if let Some(path) = selected_path {
+                            app.select_path(&path);
+                        } else {
+                            app.clamp_selection();
+                        }
+                    }
+                    KeyCode::Char('r') => refresh(engine, app),
+                    _ => {}
+                }
             }
         }
 
@@ -266,7 +452,7 @@ fn run_loop(
             app.spinner = app.spinner.wrapping_add(1);
             last_animation = Instant::now();
         }
-        if !app.paused && last_scan.elapsed() >= scan_interval {
+        if app.content.is_none() && !app.paused && last_scan.elapsed() >= scan_interval {
             refresh(engine, app);
             last_scan = Instant::now();
         }
@@ -297,6 +483,14 @@ fn refresh(engine: &mut DiffEngine, app: &mut App) {
 }
 
 fn render(frame: &mut ratatui::Frame<'_>, app: &App) {
+    if let Some(content) = &app.content {
+        render_content(frame, app, content);
+        return;
+    }
+    render_browser(frame, app);
+}
+
+fn render_browser(frame: &mut ratatui::Frame<'_>, app: &App) {
     let [header_area, panes_area, detail_area, footer_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(8),
@@ -412,7 +606,6 @@ fn render_pane(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App, pane: Pane
         (Pane::Left, false) => vec![Constraint::Min(6), Constraint::Length(2)],
         (Pane::Right, false) => vec![Constraint::Length(2), Constraint::Min(6)],
     };
-    let active = app.active_pane == pane;
     let root = match pane {
         Pane::Left => &app.report.left_root,
         Pane::Right => &app.report.right_root,
@@ -423,8 +616,14 @@ fn render_pane(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App, pane: Pane
     };
     let title = Line::from(vec![
         Span::styled(
-            if active { "◆" } else { "◇" },
-            Style::default().fg(if active { Color::Cyan } else { Color::DarkGray }),
+            match pane {
+                Pane::Left => "◀",
+                Pane::Right => "▶",
+            },
+            Style::default().fg(match pane {
+                Pane::Left => Color::Blue,
+                Pane::Right => Color::Green,
+            }),
         ),
         Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(
@@ -435,21 +634,18 @@ fn render_pane(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App, pane: Pane
     ]);
     let table = Table::new(rows, widths)
         .header(header)
-        .row_highlight_style(if active {
+        .row_highlight_style(
             Style::default()
                 .fg(Color::White)
                 .bg(Color::Rgb(20, 55, 82))
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White).bg(Color::Rgb(42, 46, 54))
-        })
+                .add_modifier(Modifier::BOLD),
+        )
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(if active {
-                    Color::Cyan
-                } else {
-                    Color::DarkGray
+                .border_style(Style::default().fg(match pane {
+                    Pane::Left => Color::Blue,
+                    Pane::Right => Color::Green,
                 }))
                 .title(title),
         );
@@ -518,6 +714,11 @@ fn render_detail(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {
                     status_style(row.entry.kind).add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(row.entry.path.to_string_lossy().into_owned()),
+                if has_comparable_content(row.entry) {
+                    Span::styled("  · Enter file diff", Style::default().fg(Color::Cyan))
+                } else {
+                    Span::raw("")
+                },
             ]),
             Line::from(vec![
                 detail_span("LEFT", row.entry.left.as_ref()),
@@ -546,7 +747,7 @@ fn render_footer(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {
     if let Some(error) = &app.last_error {
         frame.render_widget(
             Paragraph::new(Line::styled(
-                format!("scan failed · {error} · r retry · q quit"),
+                format!("error · {error} · r rescan · Enter retry · q quit"),
                 Style::default().fg(Color::Red),
             )),
             area,
@@ -562,9 +763,9 @@ fn render_footer(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {
         })
         .unwrap_or_else(|_| "now".to_owned());
     let controls = if area.width >= 96 {
-        "Tab pane   ↑↓/jk move   ←→/hl tree   Enter open   a same   r refresh   Space pause   q quit"
+        "↑↓/jk move   ←→/hl tree   Enter open/diff   a all   r refresh   Space pause   q quit"
     } else {
-        "Tab pane  ↑↓ move  ←→ tree  Enter open  a same  r scan  q quit"
+        "↑↓ move  ←→ tree  Enter open/diff  a all  r scan  q quit"
     };
     frame.render_widget(
         Paragraph::new(vec![
@@ -578,6 +779,284 @@ fn render_footer(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {
     );
 }
 
+fn render_content(frame: &mut ratatui::Frame<'_>, app: &App, content: &ContentView) {
+    let [header_area, body_area, status_area, footer_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(8),
+        Constraint::Length(3),
+        Constraint::Length(2),
+    ])
+    .areas(frame.area());
+
+    render_content_header(frame, header_area, content);
+    match &content.diff.kind {
+        ContentDiffKind::Text(text) => render_content_panes(frame, body_area, app, content, text),
+        ContentDiffKind::Binary(binary) => frame.render_widget(
+            Paragraph::new(vec![
+                Line::from("Binary or non-UTF-8 content"),
+                Line::from(format!(
+                    "first different byte  {}",
+                    binary
+                        .first_difference
+                        .map(|offset| format!("{offset} (0x{offset:x})"))
+                        .unwrap_or_else(|| "none".to_owned())
+                )),
+                Line::from(format!(
+                    "LEFT   {}  {}",
+                    human_bytes(binary.left_bytes),
+                    binary.left_preview
+                )),
+                Line::from(format!(
+                    "RIGHT  {}  {}",
+                    human_bytes(binary.right_bytes),
+                    binary.right_preview
+                )),
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Binary summary "),
+            ),
+            body_area,
+        ),
+        ContentDiffKind::TooLarge {
+            left_bytes,
+            right_bytes,
+            limit_bytes,
+        } => frame.render_widget(
+            Paragraph::new(vec![
+                Line::from("Inline content diff was not loaded."),
+                Line::from(format!("LEFT   {}", human_bytes(*left_bytes))),
+                Line::from(format!("RIGHT  {}", human_bytes(*right_bytes))),
+                Line::from(format!(
+                    "preview limit  {} per file",
+                    human_bytes(*limit_bytes)
+                )),
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" File too large "),
+            ),
+            body_area,
+        ),
+    }
+    render_content_status(frame, status_area, content);
+    render_content_footer(frame, footer_area, app, content);
+}
+
+fn render_content_header(frame: &mut ratatui::Frame<'_>, area: Rect, content: &ContentView) {
+    let summary = match &content.diff.kind {
+        ContentDiffKind::Text(text) => format!(
+            "{} rows · {} changed",
+            text.rows.len(),
+            text.difference_rows
+        ),
+        ContentDiffKind::Binary(_) => "binary summary".to_owned(),
+        ContentDiffKind::TooLarge { .. } => "metadata only".to_owned(),
+    };
+    let title = Line::from(vec![
+        Span::styled(" fdiff ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled("· FILE DIFF ", Style::default().fg(Color::Yellow)),
+    ]);
+    let line = Line::from(vec![
+        Span::styled(
+            content.diff.relative_path.to_string_lossy().into_owned(),
+            Style::default().fg(Color::White),
+        ),
+        Span::styled(
+            format!("  · {summary}"),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(line).block(Block::default().borders(Borders::ALL).title(title)),
+        area,
+    );
+}
+
+fn render_content_panes(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    app: &App,
+    content: &ContentView,
+    text: &TextContentDiff,
+) {
+    let [left_area, right_area] = if area.width >= SIDE_BY_SIDE_MIN_WIDTH {
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area)
+    } else {
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area)
+    };
+    render_content_pane(frame, left_area, app, content, text, Pane::Left);
+    render_content_pane(frame, right_area, app, content, text, Pane::Right);
+}
+
+fn render_content_pane(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    app: &App,
+    content: &ContentView,
+    text: &TextContentDiff,
+    pane: Pane,
+) {
+    let rows = text.rows.iter().map(|row| {
+        let (number, value) = match pane {
+            Pane::Left => (row.left_number, row.left_text.as_str()),
+            Pane::Right => (row.right_number, row.right_text.as_str()),
+        };
+        let number = number.map(|number| number.to_string()).unwrap_or_default();
+        let value = value
+            .chars()
+            .skip(content.horizontal_offset)
+            .collect::<String>();
+        let marker = content_marker(row.kind, pane);
+        let cells = match pane {
+            Pane::Left => vec![Cell::from(number), Cell::from(marker), Cell::from(value)],
+            Pane::Right => vec![Cell::from(marker), Cell::from(number), Cell::from(value)],
+        };
+        Row::new(cells).style(content_row_style(row.kind))
+    });
+    let header = match pane {
+        Pane::Left => Row::new(["LINE", "", "CONTENT"]),
+        Pane::Right => Row::new(["", "LINE", "CONTENT"]),
+    }
+    .style(
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD),
+    );
+    let widths = match pane {
+        Pane::Left => vec![
+            Constraint::Length(6),
+            Constraint::Length(2),
+            Constraint::Min(8),
+        ],
+        Pane::Right => vec![
+            Constraint::Length(2),
+            Constraint::Length(6),
+            Constraint::Min(8),
+        ],
+    };
+    let (label, root, color) = match pane {
+        Pane::Left => (" LEFT ", &app.report.left_root, Color::Blue),
+        Pane::Right => (" RIGHT ", &app.report.right_root, Color::Green),
+    };
+    let title = Line::from(vec![
+        Span::styled(
+            label,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            root.display().to_string(),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::raw(" "),
+    ]);
+    let table = Table::new(rows, widths)
+        .header(header)
+        .row_highlight_style(
+            Style::default()
+                .fg(Color::White)
+                .bg(Color::Rgb(65, 50, 20))
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(color))
+                .title(title),
+        );
+    let mut state =
+        TableState::default().with_selected((!text.rows.is_empty()).then_some(content.selected));
+    frame.render_stateful_widget(table, area, &mut state);
+}
+
+fn content_marker(kind: ContentRowKind, pane: Pane) -> &'static str {
+    match (kind, pane) {
+        (ContentRowKind::Modified, Pane::Left) | (ContentRowKind::LeftOnly, Pane::Left) => "-",
+        (ContentRowKind::Modified, Pane::Right) | (ContentRowKind::RightOnly, Pane::Right) => "+",
+        _ => "",
+    }
+}
+
+fn content_row_style(kind: ContentRowKind) -> Style {
+    match kind {
+        ContentRowKind::Equal => Style::default().fg(Color::DarkGray),
+        ContentRowKind::Modified => Style::default().fg(Color::Yellow),
+        ContentRowKind::LeftOnly => Style::default().fg(Color::Red),
+        ContentRowKind::RightOnly => Style::default().fg(Color::Green),
+    }
+}
+
+fn render_content_status(frame: &mut ratatui::Frame<'_>, area: Rect, content: &ContentView) {
+    let line = match &content.diff.kind {
+        ContentDiffKind::Text(text) => text
+            .rows
+            .get(content.selected)
+            .map(|row| {
+                let kind = match row.kind {
+                    ContentRowKind::Equal => "same",
+                    ContentRowKind::Modified => "modified",
+                    ContentRowKind::LeftOnly => "removed",
+                    ContentRowKind::RightOnly => "added",
+                };
+                format!(
+                    "row {}/{} · LEFT {} · RIGHT {} · {kind} · horizontal +{}",
+                    content.selected + 1,
+                    text.rows.len(),
+                    row.left_number
+                        .map(|number| number.to_string())
+                        .unwrap_or_else(|| "—".to_owned()),
+                    row.right_number
+                        .map(|number| number.to_string())
+                        .unwrap_or_else(|| "—".to_owned()),
+                    content.horizontal_offset,
+                )
+            })
+            .unwrap_or_else(|| "empty text file".to_owned()),
+        ContentDiffKind::Binary(_) => {
+            "byte-level summary only · text line navigation is unavailable".to_owned()
+        }
+        ContentDiffKind::TooLarge { .. } => {
+            "file exceeds the bounded inline preview limit".to_owned()
+        }
+    };
+    frame.render_widget(
+        Paragraph::new(line).block(Block::default().borders(Borders::ALL).title(" Status ")),
+        area,
+    );
+}
+
+fn render_content_footer(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    app: &App,
+    content: &ContentView,
+) {
+    let line = if let Some(error) = &app.last_error {
+        Line::styled(
+            format!("error · {error} · r retry · Esc back · q quit"),
+            Style::default().fg(Color::Red),
+        )
+    } else if content.text().is_some() && area.width >= 96 {
+        Line::styled(
+            "↑↓/jk row  PgUp/PgDn page  n/p change  ←→/hl horizontal  r reload  Esc back  q quit",
+            Style::default().fg(Color::Cyan),
+        )
+    } else if content.text().is_some() {
+        Line::styled(
+            "↑↓ row  n/p change  ←→ horizontal  r reload  Esc back  q quit",
+            Style::default().fg(Color::Cyan),
+        )
+    } else {
+        Line::styled(
+            "r reload  Esc/Backspace browser  q quit",
+            Style::default().fg(Color::Cyan),
+        )
+    };
+    frame.render_widget(Paragraph::new(line), area);
+}
+
 fn is_directory(entry: &DiffEntry) -> bool {
     entry
         .left
@@ -585,6 +1064,14 @@ fn is_directory(entry: &DiffEntry) -> bool {
         .into_iter()
         .chain(entry.right.as_ref())
         .any(|info| info.kind == EntryKind::Directory)
+}
+
+fn has_comparable_content(entry: &DiffEntry) -> bool {
+    entry
+        .left
+        .as_ref()
+        .zip(entry.right.as_ref())
+        .is_some_and(|(left, right)| left.kind == EntryKind::File && right.kind == EntryKind::File)
 }
 
 fn status_style(kind: DiffKind) -> Style {
@@ -631,8 +1118,8 @@ mod tests {
         App {
             report,
             selected: 0,
-            active_pane: Pane::Left,
             collapsed: BTreeSet::new(),
+            content: None,
             show_identical: false,
             paused: false,
             spinner: 0,
@@ -742,5 +1229,55 @@ mod tests {
         assert!(screen.contains("RIGHT"));
         assert!(screen.contains("left.txt"));
         assert!(screen.contains("right.txt"));
+    }
+
+    #[test]
+    fn changed_file_opens_a_side_by_side_line_diff() {
+        let left = tempdir().unwrap();
+        let right = tempdir().unwrap();
+        fs::write(left.path().join("changed.txt"), "same\nold value\ntail\n").unwrap();
+        fs::write(right.path().join("changed.txt"), "same\nnew value\ntail\n").unwrap();
+        let report = DiffEngine::new(left.path(), right.path())
+            .unwrap()
+            .scan()
+            .unwrap();
+        let mut app = app_with_report(report);
+
+        app.open_selected_content();
+        assert!(app.content.is_some());
+        let backend = TestBackend::new(120, 28);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let screen = screen(&terminal);
+
+        assert!(screen.contains("FILE DIFF"));
+        assert!(screen.contains("old value"));
+        assert!(screen.contains("new value"));
+        assert!(screen.contains("n/p change"));
+        assert!(screen.contains("Esc back"));
+    }
+
+    #[test]
+    fn narrow_content_diff_stacks_both_sides_readably() {
+        let left = tempdir().unwrap();
+        let right = tempdir().unwrap();
+        fs::write(left.path().join("changed.txt"), "old value\n").unwrap();
+        fs::write(right.path().join("changed.txt"), "new value\n").unwrap();
+        let report = DiffEngine::new(left.path(), right.path())
+            .unwrap()
+            .scan()
+            .unwrap();
+        let mut app = app_with_report(report);
+        app.open_selected_content();
+        let backend = TestBackend::new(60, 28);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let screen = screen(&terminal);
+
+        assert!(screen.contains("LEFT"));
+        assert!(screen.contains("RIGHT"));
+        assert!(screen.contains("old value"));
+        assert!(screen.contains("new value"));
     }
 }

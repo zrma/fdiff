@@ -1,0 +1,5 @@
+# Deployment plan
+region = "north"
+replicas = 2
+legacy_mode = true
+logging = "info"

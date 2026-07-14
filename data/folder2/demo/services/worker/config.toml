@@ -1,0 +1,3 @@
+name = "worker"
+concurrency = 8
+queue = "priority"
