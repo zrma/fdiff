@@ -10,10 +10,11 @@
 
 ## P1: Interactive Tree Experience
 
-- [ ] 계층형 tree row와 expand/collapse navigation
+- [x] synchronized Commander-style left/right pane
+- [x] 계층형 tree row와 expand/collapse navigation
 - [ ] status/path search와 status filter
-- [ ] 좁은 terminal에서 responsive column/detail layout
-- [ ] 선택 항목을 유지하는 stable rescan behavior
+- [x] 좁은 terminal에서 responsive pane/detail layout
+- [x] 선택 항목을 유지하는 stable rescan behavior
 
 ## P2: Scalable Watching
 

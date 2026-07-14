@@ -11,9 +11,12 @@
 ## Current Baseline
 
 - Go prototype은 Rust single-crate application으로 전환되었다.
-- 기본 interactive mode는 live TUI이며 non-TTY에서는 plain snapshot으로 fallback한다.
+- 기본 interactive mode는 synchronized Commander-style dual-pane TUI이며 non-TTY에서는
+  plain snapshot으로 fallback한다.
 - diff core는 left-only, right-only, content change, type change, identical을 구분한다.
-- 현재 다음 제품 slice는 `docs/todo-interactive-tree-navigation.md`다.
+- folder hierarchy, expand/collapse, stable rescan selection, narrow stacked layout이
+  구현되어 있다.
+- 현재 다음 제품 slice는 status/path search와 status filter다.
 
 ## Architecture Map
 

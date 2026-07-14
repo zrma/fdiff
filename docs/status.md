@@ -2,9 +2,11 @@
 
 ## Current Milestone
 
-`v0.1.0` Rust/TUI foundation이 구현되어 있다.
+`v0.1.0` Rust/TUI foundation과 Commander-style tree navigation이 구현되어 있다.
 
-- live terminal dashboard와 주기적 rescan
+- synchronized left/right pane과 주기적 rescan
+- 계층형 folder row, expand/collapse, active pane focus
+- stable path selection과 collapse state, narrow terminal stacked layout
 - path navigation, pause/resume, manual refresh, identical toggle
 - content-aware file comparison과 digest cache
 - symlink target/type-aware folder comparison
@@ -15,7 +17,7 @@
 
 ## Known Limits
 
-- flat path table이므로 큰 tree에서 계층 관계를 빠르게 파악하기 어렵다.
+- active pane은 현재 탐색 focus만 나타내며 pane별 file operation은 제공하지 않는다.
 - ignore/exclude rule과 `.gitignore` integration이 없다.
 - polling 기반이며 filesystem event notification을 사용하지 않는다.
 - scan 중 하나의 unreadable path가 있으면 해당 scan 전체가 실패한다.
@@ -29,5 +31,5 @@
 
 ## Next Slice
 
-`docs/todo-interactive-tree-navigation.md`의 계층형 navigation을 먼저 구현한다. plain
-output semantics와 diff core를 바꾸지 않고 TUI information architecture만 확장한다.
+status/path search와 status filter를 추가한다. dual-pane row alignment, plain output
+semantics, diff core는 유지한다.

@@ -1,8 +1,10 @@
 # fdiff
 
-`fdiff`는 두 폴더의 현재 차이를 읽기 쉬운 터미널 화면으로 보여 주는 Rust 기반
-폴더 diff 도구다. 터미널에서 실행하면 live TUI가 열리고, 파이프나 CI에서는
-안정적인 plain text snapshot을 출력한다.
+`fdiff`는 두 폴더의 현재 차이를 Commander 스타일의 좌우 터미널 화면으로 보여
+주는 Rust 기반 폴더 diff 도구다. 동일한 상대 경로가 두 pane의 같은 행에 맞물려
+표시되므로 한쪽에만 있거나 내용이 다른 항목을 빠르게 훑을 수 있다. 터미널에서
+실행하면 live TUI가 열리고, 파이프나 CI에서는 안정적인 plain text snapshot을
+출력한다.
 
 ## 현재 제공하는 기능
 
@@ -12,8 +14,10 @@
   파일의 digest를 재사용한다.
 - symlink는 링크 대상 경로를 비교하고 디렉터리 자체는 양쪽에 존재하면 동일하게
   본다.
-- TUI는 주기적으로 다시 scan하며 이동, 일시 정지, 즉시 새로고침, 동일 항목
-  표시 전환을 지원한다.
+- TUI는 synchronized dual-pane, folder tree 접기/펼치기, pane focus 전환을
+  제공하고 주기적으로 다시 scan한다.
+- 선택 경로와 접힌 folder는 가능한 경우 scan 뒤에도 유지되며, 좁은 터미널에서는
+  두 pane을 위아래로 배치한다.
 - stdout이 TTY가 아니면 자동으로 plain mode를 사용한다.
 
 ## 실행
@@ -40,6 +44,10 @@ cargo run -- --check <left-directory> <right-directory>
 | `k`, `↑` | 이전 항목 |
 | `g`, `Home` | 첫 항목 |
 | `G`, `End` | 마지막 항목 |
+| `Tab` | 활성 pane 전환 |
+| `h`, `←` | folder 접기 또는 상위 folder 선택 |
+| `l`, `→` | folder 펼치기 |
+| `Enter` | 선택한 folder 접기/펼치기 |
 | `Space` | live scan 일시 정지/재개 |
 | `a` | 동일 항목 표시/숨김 |
 | `r` | 즉시 다시 scan |
