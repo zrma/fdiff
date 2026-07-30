@@ -1,0 +1,24 @@
+schema_version = 1
+framework_version = "1.0.0"
+source_kind = "release"
+source_revision = "v1.0.0"
+profiles = ["vcs-jj", "public-repository", "openai-agent-guidance"]
+
+[project]
+name = "fdiff"
+objective = "두 폴더의 구조와 파일 내용 차이를 즉시 이해할 수 있는 live terminal diff 경험을\n제공한다. interactive terminal에서는 유려한 watch TUI를, automation과 pipe에서는\n결정적 plain output과 exit status를 제공한다."
+publication_class = "public"
+
+[overlay]
+agents_first_read = ".ai-first/overlays/agents-first-read.md"
+agents_project = ".ai-first/overlays/agents-project.md"
+harness_project = ".ai-first/overlays/harness-project.md"
+
+[output]
+agents = "AGENTS.md"
+harness = "docs/agent-harness.md"
+standalone_check = ".ai-first/check.py"
+lock = ".ai-first.lock"
+
+[checks]
+publication = "scripts/check-publication-boundary.py"
