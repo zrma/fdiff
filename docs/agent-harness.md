@@ -170,5 +170,5 @@ rule, profile, schema validation, fixture 또는 repository overlay에 기계화
 - Navigation: `docs/HANDOFF.md`.
 - Current state and direction: `docs/status.md`, `docs/roadmap.md`.
 - Completed work: `docs/completed-milestones.md`.
-- Active work: `docs/todo-interactive-tree-navigation.md`.
+- Active work: 현재 없음. 다음 slice와 spec 착수 기준은 `docs/HANDOFF.md`, `docs/roadmap.md`가 소유한다.
 - Declared checks: `docs/REPO_MANIFEST.yaml`.

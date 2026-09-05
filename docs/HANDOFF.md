@@ -18,6 +18,7 @@
   구현되어 있다.
 - 양쪽 regular file은 `Enter`로 bounded side-by-side line diff를 열 수 있고,
   binary/non-UTF-8 input은 byte summary로 fallback한다.
+- 완료 결과와 설계 제한은 `docs/completed-milestones.md`에 이관했다. active spec은 없다.
 - 현재 다음 제품 slice는 status/path search와 status filter다.
 
 ## Architecture Map
