@@ -2,8 +2,8 @@
   "framework": {
     "digest": "4a1e4036ba3001ffe23092e2e7c01cbaad42b558b698e4d591e93fa7efe63d0c",
     "source_commit": "a0d0952b09b09d4ba3288b3e0061e6e885e292fd",
-    "source_kind": "commit",
-    "source_revision": "a0d0952b09b09d4ba3288b3e0061e6e885e292fd",
+    "source_kind": "release",
+    "source_revision": "v1.4.0",
     "version": "1.4.0"
   },
   "framework_inputs": {
@@ -34,7 +34,7 @@
     "openai-agent-guidance"
   ],
   "repository_inputs": {
-    ".ai-first.toml": "e6f236e09be7f8a38799dee707af3d151deefdc0405e8202203da191c1f2de45",
+    ".ai-first.toml": "d7123aa5132bbbf26d60a2d4eefd8b45f0335f98115601458d3b38fe81a8ac7f",
     ".ai-first/overlays/agents-first-read.md": "df3d577613a124442d5a3dfda99394ea71303a45255a5fbe98dd04f4af5f4ed6",
     ".ai-first/overlays/agents-project.md": "9bfe90338ef560a32f7681d0c306a3d2ed039c8a5461aeb16d4ba75437c3485a",
     ".ai-first/overlays/harness-project.md": "c7f05fcf53a2a2063947b54e1b92478d3c35b6c9a1b238ee9421b9c893a25874"
