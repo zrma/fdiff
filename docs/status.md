@@ -14,7 +14,7 @@ inspection이 구현되어 있다.
 - content-aware file comparison과 digest cache
 - symlink target/type-aware folder comparison
 - plain output과 automation용 `--check` exit status
-- GPT-5.6 agent-harness와 local/publication validation gates
+- [AI-first agent 지침](../AGENTS.md)과 local/publication validation gates
 - canonical `agent-harness-v1` interface guard와 generic publication boundary guard
 - gitignore.io Rust/editor/OS baseline과 fdiff local-artifact overlay
 
